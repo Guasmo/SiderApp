@@ -1,5 +1,10 @@
 {
   "expo": {
+    "permisons": [
+              "INTERNET",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+    ],
     "name": "SiderApp",
     "slug": "SiderApp",
     "version": "1.0.0",
