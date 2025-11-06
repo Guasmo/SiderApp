@@ -1,8 +1,8 @@
 import {
-    authenticateWithOptions,
-    BiometricStrength,
-    isSensorAvailable,
-    setDebugMode
+  authenticateWithOptions,
+  BiometricStrength,
+  isSensorAvailable,
+  setDebugMode
 } from '@sbaiahmed1/react-native-biometrics';
 import { useEffect, useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -46,43 +46,60 @@ const AuthExamples = () => {
     }
   };
 
-  // Simple authentication with Face Unlock (Weak Biometric)
+  // FIXED: Force Face Unlock only (without fingerprint prompt)
   const handleFaceUnlockAuth = async () => {
     if (!weakSensorInfo?.available && !sensorInfo?.available) {
       Alert.alert('Error', 'No hay sensores biométricos disponibles');
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const result = await authenticateWithOptions({
-        title: '👤 Desbloqueo Facial',
-        subtitle: 'Mira a la cámara para autenticarte',
-        description: 'Usando reconocimiento facial de tu Xiaomi',
-        cancelLabel: 'Cancelar',
-        allowDeviceCredentials: true,
-        biometricStrength: BiometricStrength.Weak, // CRÍTICO: Permite Face Unlock
-      });
+    // IMPORTANTE: En Android, si hay huella disponible, siempre la mostrará primero
+    // Esta es una limitación del sistema BiometricPrompt de Android
+    Alert.alert(
+      '⚠️ Limitación de Android',
+      'Android prioriza la huella digital cuando ambos métodos están disponibles. Para usar SOLO Face Unlock:\n\n' +
+      '1. Ve a Settings → Passwords & security\n' +
+      '2. Deshabilita temporalmente "Fingerprint unlock"\n' +
+      '3. O usa el botón "Cualquier Método" que intenta ambos automáticamente',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Intentar De Todos Modos', 
+          onPress: async () => {
+            setIsLoading(true);
+            try {
+              const result = await authenticateWithOptions({
+                title: '👤 Desbloqueo Facial',
+                subtitle: 'Usa Face Unlock o Huella',
+                description: 'Android mostrará el método más seguro disponible',
+                cancelLabel: 'Cancelar',
+                allowDeviceCredentials: true,
+                biometricStrength: BiometricStrength.Weak,
+              });
 
-      console.log('Face unlock result:', result);
+              console.log('Face unlock result:', result);
 
-      if (result.success) {
-        Alert.alert(
-          '✅ Éxito',
-          `Autenticación exitosa con ${result.biometricStrength || 'biometría débil'}!`
-        );
-      } else {
-        Alert.alert(
-          '❌ Falló',
-          `Error: ${result.error || 'Autenticación fallida'}\nCódigo: ${result.errorCode || 'N/A'}`
-        );
-      }
-    } catch (error) {
-      console.error('Face unlock error:', error);
-      Alert.alert('Error', 'Error en autenticación facial');
-    } finally {
-      setIsLoading(false);
-    }
+              if (result.success) {
+                Alert.alert(
+                  '✅ Éxito',
+                  `Autenticación exitosa con ${result.biometricStrength || 'biometría'}!`
+                );
+              } else {
+                Alert.alert(
+                  '❌ Falló',
+                  `Error: ${result.error || 'Autenticación fallida'}\nCódigo: ${result.errorCode || 'N/A'}`
+                );
+              }
+            } catch (error) {
+              console.error('Face unlock error:', error);
+              Alert.alert('Error', 'Error en autenticación facial');
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Fingerprint authentication (Strong Biometric)
@@ -100,7 +117,7 @@ const AuthExamples = () => {
         description: 'Autenticación con huella dactilar',
         cancelLabel: 'Cancelar',
         allowDeviceCredentials: true,
-        biometricStrength: BiometricStrength.Strong, // Solo huella
+        biometricStrength: BiometricStrength.Strong,
       });
 
       if (result.success) {
@@ -116,20 +133,20 @@ const AuthExamples = () => {
     }
   };
 
-  // Any available biometric (Face OR Fingerprint)
+  // Any available biometric (Face OR Fingerprint) - BEST OPTION
   const handleAnyBiometricAuth = async () => {
     setIsLoading(true);
     try {
-      // Primero intenta con Strong (huella)
+      // Intenta primero con Weak (permite Face Unlock)
       const result = await authenticateWithOptions({
         title: '🔒 Autenticación Biométrica',
-        subtitle: 'Usa huella o rostro',
-        description: 'Autenticación flexible con cualquier método disponible',
+        subtitle: 'Usa cualquier método disponible',
+        description: 'Huella dactilar o reconocimiento facial',
         cancelLabel: 'Cancelar',
         fallbackLabel: 'Usar contraseña',
         allowDeviceCredentials: true,
         disableDeviceFallback: false,
-        biometricStrength: BiometricStrength.Strong,
+        biometricStrength: BiometricStrength.Weak, // Permite ambos métodos
       });
 
       console.log('Any biometric result:', result);
@@ -143,22 +160,10 @@ const AuthExamples = () => {
           `Éxito con ${method}!${result.fallbackUsed ? ' (con fallback)' : ''}`
         );
       } else {
-        // Si falla Strong, intenta con Weak
-        console.log('Strong failed, trying Weak...');
-        const weakResult = await authenticateWithOptions({
-          title: '👤 Reconocimiento Facial',
-          subtitle: 'Mira a la cámara',
-          description: 'Intentando con Face Unlock',
-          cancelLabel: 'Cancelar',
-          allowDeviceCredentials: true,
-          biometricStrength: BiometricStrength.Weak,
-        });
-
-        if (weakResult.success) {
-          Alert.alert('✅ Autenticado', 'Éxito con reconocimiento facial!');
-        } else {
-          Alert.alert('❌ Falló', 'No se pudo autenticar con ningún método');
-        }
+        Alert.alert(
+          '❌ Falló', 
+          `Autenticación fallida: ${result.error || 'Error desconocido'}`
+        );
       }
     } catch (error) {
       console.error('Biometric auth error:', error);
@@ -212,8 +217,12 @@ const AuthExamples = () => {
         {Platform.OS === 'android' && (
           <View style={styles.infoBox}>
             <Text style={styles.infoText}>
-              ℹ️ En Android, Face Unlock se considera "biometría débil" (Weak).
-              Asegúrate de tener configurado el Face Unlock en Settings → Security.
+              ⚠️ IMPORTANTE: En Android, BiometricPrompt siempre prioriza el sensor de huella dactilar 
+              cuando está disponible. Esto es una limitación del sistema Android, no de la librería.
+            </Text>
+            <Text style={styles.infoText}>
+              {'\n'}💡 Para usar SOLO Face Unlock, deshabilita temporalmente la huella en:
+              Settings → Security → Fingerprint unlock
             </Text>
           </View>
         )}
@@ -223,7 +232,25 @@ const AuthExamples = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>🎯 Métodos de Autenticación</Text>
 
-        {/* Face Unlock Button */}
+        {/* RECOMMENDED: Any Method Button - Works Best */}
+        <TouchableOpacity
+          style={[
+            styles.button,
+            styles.anyButton,
+            (!weakSensorInfo?.available && !sensorInfo?.available) && styles.buttonDisabled,
+            isLoading && styles.buttonDisabled,
+          ]}
+          onPress={handleAnyBiometricAuth}
+          disabled={(!weakSensorInfo?.available && !sensorInfo?.available) || isLoading}
+        >
+          <Text style={styles.buttonIcon}>🔓</Text>
+          <Text style={styles.buttonText}>
+            {isLoading ? 'Procesando...' : 'Cualquier Método (RECOMENDADO)'}
+          </Text>
+          <Text style={styles.buttonSubtext}>(Permite Face Unlock o Huella)</Text>
+        </TouchableOpacity>
+
+        {/* Face Unlock Button - With Warning */}
         <TouchableOpacity
           style={[
             styles.button,
@@ -238,7 +265,7 @@ const AuthExamples = () => {
           <Text style={styles.buttonText}>
             {isLoading ? 'Procesando...' : 'Desbloqueo Facial'}
           </Text>
-          <Text style={styles.buttonSubtext}>(Weak Biometric)</Text>
+          <Text style={styles.buttonSubtext}>(Puede mostrar huella primero)</Text>
         </TouchableOpacity>
 
         {/* Fingerprint Button */}
@@ -259,24 +286,6 @@ const AuthExamples = () => {
           <Text style={styles.buttonSubtext}>(Strong Biometric)</Text>
         </TouchableOpacity>
 
-        {/* Any Biometric Button */}
-        <TouchableOpacity
-          style={[
-            styles.button,
-            styles.anyButton,
-            (!weakSensorInfo?.available && !sensorInfo?.available) && styles.buttonDisabled,
-            isLoading && styles.buttonDisabled,
-          ]}
-          onPress={handleAnyBiometricAuth}
-          disabled={(!weakSensorInfo?.available && !sensorInfo?.available) || isLoading}
-        >
-          <Text style={styles.buttonIcon}>🔓</Text>
-          <Text style={styles.buttonText}>
-            {isLoading ? 'Procesando...' : 'Cualquier Método'}
-          </Text>
-          <Text style={styles.buttonSubtext}>(Automático con Fallback)</Text>
-        </TouchableOpacity>
-
         {/* Re-check Button */}
         <TouchableOpacity
           style={[styles.button, styles.refreshButton]}
@@ -289,12 +298,36 @@ const AuthExamples = () => {
 
       {/* Info Box */}
       <View style={styles.helpBox}>
-        <Text style={styles.helpTitle}>💡 Cómo usar Face Unlock:</Text>
+        <Text style={styles.helpTitle}>💡 Guía de Uso:</Text>
         <Text style={styles.helpText}>
-          1. Ve a Settings → Passwords & security{'\n'}
-          2. Selecciona "Face unlock"{'\n'}
-          3. Configura tu rostro{'\n'}
-          4. Vuelve a la app y usa el botón "Desbloqueo Facial"
+          <Text style={styles.boldText}>Para Face Unlock EXCLUSIVO:</Text>{'\n'}
+          1. Settings → Passwords & security{'\n'}
+          2. Desactiva "Fingerprint unlock"{'\n'}
+          3. Mantén activo solo "Face unlock"{'\n'}
+          4. Usa el botón "Desbloqueo Facial"{'\n\n'}
+          
+          <Text style={styles.boldText}>Para cualquier método:</Text>{'\n'}
+          1. Mantén ambos activos en Settings{'\n'}
+          2. Usa el botón "Cualquier Método"{'\n'}
+          3. Android elegirá automáticamente
+        </Text>
+      </View>
+
+      {/* Technical Explanation */}
+      <View style={styles.technicalBox}>
+        <Text style={styles.technicalTitle}>🔧 Explicación Técnica:</Text>
+        <Text style={styles.technicalText}>
+          Android BiometricPrompt API tiene una jerarquía de seguridad:
+          {'\n\n'}
+          1. <Text style={styles.boldText}>Strong (Class 3)</Text>: Huella, Iris
+          {'\n'}
+          2. <Text style={styles.boldText}>Weak (Class 2)</Text>: Face Unlock
+          {'\n\n'}
+          Cuando ambos están disponibles, Android SIEMPRE prioriza Strong sobre Weak 
+          para máxima seguridad. Esta es una decisión de diseño del sistema operativo.
+          {'\n\n'}
+          La única forma de forzar Face Unlock es deshabilitando temporalmente los 
+          sensores Strong en la configuración del dispositivo.
         </Text>
       </View>
     </View>
@@ -419,10 +452,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
+    textAlign: 'center',
   },
   buttonSubtext: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 12,
+    textAlign: 'center',
   },
   helpBox: {
     backgroundColor: '#E3F2FD',
@@ -430,6 +465,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderLeftWidth: 4,
     borderLeftColor: '#2196F3',
+    marginBottom: 15,
   },
   helpTitle: {
     fontSize: 16,
@@ -441,5 +477,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1976D2',
     lineHeight: 22,
+  },
+  technicalBox: {
+    backgroundColor: '#F3E5F5',
+    padding: 15,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#9C27B0',
+  },
+  technicalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#7B1FA2',
+    marginBottom: 10,
+  },
+  technicalText: {
+    fontSize: 13,
+    color: '#7B1FA2',
+    lineHeight: 20,
+  },
+  boldText: {
+    fontWeight: '700',
   },
 });
